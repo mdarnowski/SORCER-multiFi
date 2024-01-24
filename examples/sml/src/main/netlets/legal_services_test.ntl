@@ -1,6 +1,6 @@
 #!/usr/bin/env nsh
 /*
- * SORCER Script for Legal Consultation Service
+ * SORCER Script for Legal Consultation Service with Data Piping in Service Composition
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * You may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-@Codebase(group='org.sorcer', module='sml', version='${sorcer.version}', classifier='dl')
+@Codebase(group='org.sorcer', module='legalconsultation', version='${sorcer.version}', classifier='dl')
 import sorcer.arithmetic.provider.legal_consultation_services.ClientSevice
 import sorcer.arithmetic.provider.legal_consultation_services.LawyerService
 import sorcer.arithmetic.provider.legal_consultation_services.SchedulingService
@@ -25,26 +25,39 @@ import sorcer.arithmetic.provider.legal_consultation_services.DataAnalysisServic
 // Create a client profile
 Task createClientProfile = task("createClientProfile", sig("createClientProfile", ClientService.class),
         context("clientProfile", inVal("client/name"), inVal("client/details"),
-                outVal("profile/status")), strategy(Monitor.YES));
+                outVal("profile/clientId")), strategy(Monitor.YES));
 
-// Schedule an appointment
+// Create a lawyer profile
+Task createLawyerProfile = task("createLawyerProfile", sig("createLawyerProfile", LawyerService.class),
+        context("lawyerProfile", inVal("lawyer/name"), inVal("lawyer/details"),
+                outVal("profile/lawyerId")), strategy(Monitor.YES));
+
+// Schedule an appointment using the client and lawyer IDs from the previous tasks
 Task scheduleAppointment = task("scheduleAppointment", sig("scheduleAppointment", SchedulingService.class),
         context("appointment", inVal("schedule/date"), inVal("schedule/time"),
                 inVal("client/id"), inVal("lawyer/id"), outVal("appointment/status")),
         strategy(Monitor.YES));
 
-// Initiate a chat between client and lawyer
+// Initiate a chat between client and lawyer using their IDs
 Task initiateChat = task("initiateChat", sig("initiateChat", CommunicationService.class),
         context("communication", inVal("client/id"), inVal("lawyer/id"),
                 outVal("chat/link")), strategy(Monitor.YES));
 
-// Perform historical analysis
+// Perform historical analysis using the client and lawyer IDs
 Task performHistoricalAnalysis = task("performHistoricalAnalysis", sig("performHistoricalAnalysis", DataAnalysisService.class),
         context("analysis", inVal("client/id"), inVal("lawyer/id"),
                 outVal("analysis/results")), strategy(Monitor.YES));
 
-// Service Composition: Client Profile Creation and Appointment Scheduling followed by Communication and Analysis
+// Service Composition with Data Piping
 job("legalConsultationJob",
-        job("clientInteraction", createClientProfile, scheduleAppointment, strategy(Monitor.YES)),
-        job("consultationPreparation", initiateChat, performHistoricalAnalysis, strategy(Monitor.YES)),
-        strategy(Monitor.YES))
+        job("profileCreation", createClientProfile, createLawyerProfile, strategy(Monitor.YES)),
+        job("consultationPreparation", scheduleAppointment, initiateChat, performHistoricalAnalysis, strategy(Monitor.YES),
+            pipe(outPoint(createClientProfile, "profile/clientId"), inPoint(scheduleAppointment, "client/id")),
+            pipe(outPoint(createLawyerProfile, "profile/lawyerId"), inPoint(scheduleAppointment, "lawyer/id")),
+            pipe(outPoint(createClientProfile, "profile/clientId"), inPoint(initiateChat, "client/id")),
+            pipe(outPoint(createLawyerProfile, "profile/lawyerId"), inPoint(initiateChat, "lawyer/id")),
+            pipe(outPoint(createClientProfile, "profile/clientId"), inPoint(performHistoricalAnalysis, "client/id")),
+            pipe(outPoint(createLawyerProfile, "profile/lawyerId"), inPoint(performHistoricalAnalysis, "lawyer/id"))
+        ),
+        strategy(Monitor.YES)
+)
