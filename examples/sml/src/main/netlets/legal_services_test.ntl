@@ -1,0 +1,50 @@
+#!/usr/bin/env nsh
+/*
+ * SORCER Script for Legal Consultation Service
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+@Codebase(group='org.sorcer', module='sml', version='${sorcer.version}', classifier='dl')
+import sorcer.arithmetic.provider.legal_consultation_services.ClientSevice
+import sorcer.arithmetic.provider.legal_consultation_services.LawyerService
+import sorcer.arithmetic.provider.legal_consultation_services.SchedulingService
+import sorcer.arithmetic.provider.legal_consultation_services.CommunicationService
+import sorcer.arithmetic.provider.legal_consultation_services.DataAnalysisService
+
+// Create a client profile
+Task createClientProfile = task("createClientProfile", sig("createClientProfile", ClientService.class),
+        context("clientProfile", inVal("client/name"), inVal("client/details"),
+                outVal("profile/status")), strategy(Monitor.YES));
+
+// Schedule an appointment
+Task scheduleAppointment = task("scheduleAppointment", sig("scheduleAppointment", SchedulingService.class),
+        context("appointment", inVal("schedule/date"), inVal("schedule/time"),
+                inVal("client/id"), inVal("lawyer/id"), outVal("appointment/status")),
+        strategy(Monitor.YES));
+
+// Initiate a chat between client and lawyer
+Task initiateChat = task("initiateChat", sig("initiateChat", CommunicationService.class),
+        context("communication", inVal("client/id"), inVal("lawyer/id"),
+                outVal("chat/link")), strategy(Monitor.YES));
+
+// Perform historical analysis
+Task performHistoricalAnalysis = task("performHistoricalAnalysis", sig("performHistoricalAnalysis", DataAnalysisService.class),
+        context("analysis", inVal("client/id"), inVal("lawyer/id"),
+                outVal("analysis/results")), strategy(Monitor.YES));
+
+// Service Composition: Client Profile Creation and Appointment Scheduling followed by Communication and Analysis
+job("legalConsultationJob",
+        job("clientInteraction", createClientProfile, scheduleAppointment, strategy(Monitor.YES)),
+        job("consultationPreparation", initiateChat, performHistoricalAnalysis, strategy(Monitor.YES)),
+        strategy(Monitor.YES))
